@@ -76,11 +76,11 @@ namespace WindowsLiveCaptionsReader
                 this.DragMove();
         }
         
-        public void UpdateContext(string newContext)
+        public void UpdateContext(string newContext, bool autoAnalyze = false)
         {
              _context = newContext;
-             ContextText.Text = newContext;
-             Analyze();
+             ContextText.Text = _context;
+             if (autoAnalyze) Analyze();
         }
     }
 }

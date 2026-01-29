@@ -503,6 +503,50 @@ namespace WindowsLiveCaptionsReader
             if (e.ChangedButton == MouseButton.Left)
                 this.DragMove();
         }
+        private Services.BrowserCaptureService _browserScanner = new Services.BrowserCaptureService();
+
+        private async void BrowserScan_Click(object sender, RoutedEventArgs e)
+        {
+            StatusText.Text = "⏳ Switch to Browser in 3s...";
+            await Task.Delay(1000);
+            StatusText.Text = "⏳ Switch to Browser in 2s...";
+            await Task.Delay(1000);
+            StatusText.Text = "⏳ Switch to Browser in 1s...";
+            await Task.Delay(1000);
+
+            StatusText.Text = "🌐 Scanning...";
+            string text = await _browserScanner.GetSelectedTextAsync();
+
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                StatusText.Text = "⚠️ No text found/selected.";
+                return;
+            }
+
+            StatusText.Text = "✅ Text Captured!";
+            
+            // Open Assistant with this text
+            // If text is very long, maybe truncate for context preview?
+            // Reuse the existing logic to open Assistant
+            
+            if (_assistantWindow == null || !_assistantWindow.IsLoaded)
+            {
+                _assistantWindow = new AssistantWindow(_translator, $"[BROWSER CONTEXT]:\n{text}", this);
+                _assistantWindow.Show();
+            }
+            else
+            {
+                _assistantWindow.UpdateContext($"[BROWSER CONTEXT]:\n{text}", true);
+                _assistantWindow.Activate();
+                if (_assistantWindow.WindowState == WindowState.Minimized) _assistantWindow.WindowState = WindowState.Normal;
+            }
+            
+            // Auto trigger analysis
+            // We need to expose Analyze if we want to force it, but passing context usually triggers it in constructor.
+            // If window was already open, UpdateContext doesn't auto-trigger Analyze in previous code.
+            // Ideally we should tell the window to analyze.
+        }
+
         private async void GenerateSummary_Click(object sender, RoutedEventArgs e)
         {
             if (History.Count == 0)
