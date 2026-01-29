@@ -1,0 +1,352 @@
+<Window x:Class="WindowsLiveCaptionsReader.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="Live Captions Reader" Height="350" Width="800"
+    WindowStyle="None"
+    AllowsTransparency="True"
+    Background="Transparent"
+    Topmost="{Binding IsTopmost}"
+    ResizeMode="CanResizeWithGrip"
+    MouseDown="Window_MouseDown"
+    KeyDown="Window_KeyDown">
+    <Window.Resources>
+        <Style x:Key="ScrollViewerStyle" TargetType="ScrollViewer">
+            <Setter Property="VerticalScrollBarVisibility" Value="Hidden" />
+        </Style>
+
+        <!-- Pulsing Animation Style for Indicator -->
+        <Style x:Key="PulsingIndicator" TargetType="Ellipse">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsListening}" Value="True">
+                    <DataTrigger.EnterActions>
+                        <BeginStoryboard>
+                            <Storyboard RepeatBehavior="Forever">
+                                <DoubleAnimation Storyboard.TargetProperty="Opacity" From="1.0"
+                                    To="0.4" Duration="0:0:0.8" AutoReverse="True" />
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </DataTrigger.EnterActions>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Modern Ghost/Icon Button Style -->
+        <Style x:Key="CleanIconButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="#88FFFFFF" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" Background="{TemplateBinding Background}"
+                            CornerRadius="4" Padding="5">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#22FFFFFF" />
+                                <Setter Property="Foreground" Value="White" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#11FFFFFF" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Border x:Name="MainBorder" CornerRadius="12" Background="#DD121212" BorderBrush="#22FFFFFF"
+        BorderThickness="1">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="25" ShadowDepth="10" Opacity="0.6" Direction="270" />
+        </Border.Effect>
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" /> <!-- Minimal Header -->
+                <RowDefinition Height="*" />    <!-- History -->
+                <RowDefinition Height="Auto" /> <!-- Active Translation -->
+            </Grid.RowDefinitions>
+
+            <!-- 1. Minimal Header -->
+            <Grid Grid.Row="0" Margin="15,10,15,5">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" /> <!-- Status/Indicator -->
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" /> <!-- Controls -->
+                </Grid.ColumnDefinitions>
+
+                <!-- Status Indicator -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Ellipse x:Name="StatusIndicator" Width="8" Height="8" Fill="#00FF7F"
+                        Margin="0,0,8,0">
+                        <!-- Static for now, animation requires ViewModel binding setup -->
+                    </Ellipse>
+                    <TextBlock x:Name="StatusText" Text="Ready" Foreground="#66FFFFFF" FontSize="11"
+                        VerticalAlignment="Center" FontWeight="SemiBold" />
+                </StackPanel>
+
+                <!-- Window Controls -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- Pause/Resume Button -->
+                    <Button x:Name="BtnPause" Click="PauseResume_Click"
+                        Style="{StaticResource CleanIconButtonStyle}" Margin="0,0,5,0"
+                        ToolTip="Pause Listening">
+                        <TextBlock x:Name="BtnPauseIcon" Text="&#xE769;"
+                            FontFamily="Segoe MDL2 Assets" FontSize="14" />
+                    </Button>
+
+                    <!-- Microphone Button -->
+                    <Button x:Name="BtnMic" Click="MicToggle_Click"
+                        Style="{StaticResource CleanIconButtonStyle}" Margin="0,0,5,0"
+                        ToolTip="Enable Microphone">
+                        <TextBlock x:Name="BtnMicIcon" Text="&#xE720;"
+                            FontFamily="Segoe MDL2 Assets" FontSize="14" />
+                    </Button>
+
+                    <!-- Clear History Button -->
+                    <Button Click="ClearHistory_Click"
+                        Style="{StaticResource CleanIconButtonStyle}" Margin="0,0,5,0"
+                        ToolTip="Clear History">
+                        <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="14" />
+                    </Button>
+
+                    <!-- Settings Button -->
+                    <Button x:Name="BtnSettings" Click="Settings_Click"
+                        Style="{StaticResource CleanIconButtonStyle}" Margin="0,0,5,0"
+                        ToolTip="Settings">
+                        <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="14" />
+                    </Button>
+
+                    <!-- Summary Button -->
+                    <Button Click="GenerateSummary_Click"
+                        Style="{StaticResource CleanIconButtonStyle}" Margin="0,0,5,0"
+                        ToolTip="End Session &amp; Generate Notes">
+                        <TextBlock Text="&#xE70F;" FontFamily="Segoe MDL2 Assets" FontSize="14" />
+                    </Button>
+
+                    <!-- Close Button -->
+                    <Button Click="CloseApp_Click" Style="{StaticResource CleanIconButtonStyle}"
+                        ToolTip="Close Application">
+                        <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets" FontSize="12" />
+                    </Button>
+                </StackPanel>
+            </Grid>
+
+            <!-- Settings Popup Overlay (Inside Grid for custom look) -->
+            <Border x:Name="SettingsPanel" Grid.Row="1" Grid.RowSpan="2" HorizontalAlignment="Right"
+                VerticalAlignment="Top"
+                Margin="0,0,15,0" Background="#EE252525" CornerRadius="8" BorderBrush="#33FFFFFF"
+                BorderThickness="1"
+                Visibility="Collapsed" Padding="15" Panel.ZIndex="100" Width="220">
+                <StackPanel>
+                    <TextBlock Text="Settings" Foreground="White" FontWeight="Bold"
+                        Margin="0,0,0,10" />
+
+                    <!-- Audio Settings Section -->
+                    <TextBlock Text="Microphone Input" Foreground="Gray" FontSize="11"
+                        Margin="0,5,0,2" />
+                    <ComboBox x:Name="ComboMicrophones"
+                        SelectionChanged="ComboMicrophones_SelectionChanged"
+                        Height="25" Margin="0,0,0,10" />
+
+                    <Button Content="Test &amp; Validate System" Click="TestSystem_Click"
+                        Background="#333" Foreground="White" BorderBrush="Gray" Height="25"
+                        Margin="0,0,0,5" />
+
+                    <!-- Validation Output -->
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                        <TextBlock Text="Mic Level:" Foreground="Gray" FontSize="11"
+                            VerticalAlignment="Center" Margin="0,0,5,0" />
+                        <ProgressBar x:Name="MicLevelBar" Width="100" Height="4" Maximum="1"
+                            Value="0" Background="#222" Foreground="#00FF00" BorderThickness="0" />
+                    </StackPanel>
+                    <TextBlock x:Name="TestResultText" Text="" Foreground="#FFAAAA" FontSize="11"
+                        Margin="0,0,0,10" TextWrapping="Wrap" />
+
+                    <Separator Background="#33FFFFFF" Margin="0,0,0,10" />
+
+                    <DockPanel LastChildFill="False" Margin="0,0,0,5">
+                        <TextBlock Text="Opacity" Foreground="#CCCCCC" VerticalAlignment="Center" />
+                    </DockPanel>
+                    <Slider Minimum="0.2" Maximum="1.0" Value="0.8"
+                        ValueChanged="Slider_ValueChanged" Margin="0,0,0,15" />
+
+                    <CheckBox Content="Always on Top" Foreground="#CCCCCC" IsChecked="True"
+                        Checked="Topmost_Checked" Unchecked="Topmost_Unchecked" Margin="0,0,0,5" />
+
+                    <Button Content="Close Menu" Click="CloseSettings_Click" Margin="0,10,0,0"
+                        Background="#33FFFFFF" Foreground="White" BorderThickness="0" Padding="5">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="b" Background="#33FFFFFF" CornerRadius="4"
+                                    Padding="5">
+                                    <ContentPresenter HorizontalAlignment="Center" />
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="b" Property="Background"
+                                            Value="#55FFFFFF" />
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                </StackPanel>
+            </Border>
+
+            <!-- 2. History List (Background) -->
+            <ScrollViewer Grid.Row="1" x:Name="HistoryScrollViewer"
+                Style="{StaticResource ScrollViewerStyle}" Margin="20,5,20,5">
+                <ItemsControl x:Name="HistoryList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Margin="0,0,0,15" Opacity="0.5">
+                                <!-- Swap: English First (Big), Spanish Second (Small) -->
+                                <Grid Margin="0,0,0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" /> <!-- Icon -->
+                                        <ColumnDefinition Width="*" />    <!-- Text -->
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Source Icon -->
+                                    <TextBlock Grid.Column="0" Text="{Binding SourceIcon}"
+                                        FontFamily="Segoe MDL2 Assets"
+                                        Foreground="{Binding SourceColor}"
+                                        FontSize="12" Margin="0,3,8,0" VerticalAlignment="Top"
+                                        ToolTip="Input Source" />
+
+                                    <!-- Original Text -->
+                                    <TextBlock Grid.Column="1" Text="{Binding OriginalText}"
+                                        FontWeight="SemiBold" FontSize="14"
+                                        Foreground="White"
+                                        TextWrapping="Wrap" />
+                                </Grid>
+                                <TextBlock Text="{Binding TranslatedText}" FontSize="13"
+                                    Foreground="#CCCCCC" TextWrapping="Wrap" Margin="20,0,0,0" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <!-- Suggestions Overlay (Copilot) -->
+            <Border x:Name="SuggestionsOverlay" Grid.Row="1" Background="#F01e293b" CornerRadius="8"
+                Margin="15" Visibility="Collapsed" Padding="20" Panel.ZIndex="50">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Foreground="#FFD700" FontWeight="Bold" FontSize="14"
+                        Margin="0,0,0,15">
+                        <Run FontFamily="Segoe MDL2 Assets" Text="&#xE896;" />
+                        <Run Text=" Assistant Suggestions" />
+                    </TextBlock>
+
+                    <TextBlock x:Name="SuggestionsText" Grid.Row="1" Text="Thinking..."
+                        Foreground="#DDD" FontSize="15" TextWrapping="Wrap" LineHeight="24" />
+
+                    <Button Grid.Row="2" Content="Dismiss" Click="DismissCopilot_Click"
+                        HorizontalAlignment="Right" Margin="0,15,0,0" Padding="15,6"
+                        Style="{StaticResource CleanIconButtonStyle}" Foreground="White">
+                        <!-- Reusing clean style but might need background -->
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="b" Background="#33FFFFFF" CornerRadius="4"
+                                    Padding="10,5">
+                                    <ContentPresenter HorizontalAlignment="Center" />
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="b" Property="Background"
+                                            Value="#55FFFFFF" />
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- 3. Active Translation (Dominant English) -->
+            <Border Grid.Row="2" Padding="20,15,20,20" Background="#15FFFFFF"
+                CornerRadius="0,0,12,12">
+                <StackPanel>
+                    <!-- Row 1: Main Text (English/Original) + Assist Button -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- ORIGINAL TEXT (Dominant) -->
+                        <TextBlock x:Name="OriginalTextBlock"
+                            Grid.Column="0"
+                            Text="Listening..."
+                            Foreground="#FFFFFF"
+                            FontSize="22"
+                            FontWeight="SemiBold"
+                            FontFamily="Segoe UI"
+                            TextWrapping="Wrap"
+                            TextAlignment="Left"
+                            LineHeight="28">
+                            <TextBlock.Effect>
+                                <DropShadowEffect ShadowDepth="1" BlurRadius="2" Color="Black"
+                                    Opacity="0.5" />
+                            </TextBlock.Effect>
+                        </TextBlock>
+
+                        <!-- Assist Button next to text -->
+                        <Button x:Name="BtnQuickAssist" Grid.Column="1" Click="Copilot_Click"
+                            Style="{StaticResource CleanIconButtonStyle}"
+                            VerticalAlignment="Bottom" Margin="10,0,0,2">
+                            <Button.ToolTip>
+                                <ToolTip Content="Asistente de Análisis (Ctrl+Space)" />
+                            </Button.ToolTip>
+                            <Viewbox Width="20" Height="20">
+                                <Canvas Width="24" Height="24">
+                                    <!-- Document Frame (White) -->
+                                    <Path
+                                        Data="M8,3 H20 A1,1 0 0 1 21,4 V20 A1,1 0 0 1 20,21 H8 A1,1 0 0 1 7,20 V17"
+                                        Stroke="White" StrokeThickness="2" StrokeLineJoin="Round"
+                                        StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                                    <!-- Lines inside (White) -->
+                                    <Path Data="M11,17 H17 M11,13 H15"
+                                        Stroke="White" StrokeThickness="2" StrokeLineJoin="Round"
+                                        StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                                    <!-- Magnifying Glass Circle (Gold) -->
+                                    <Ellipse Width="6" Height="6" Canvas.Left="5" Canvas.Top="7"
+                                        Stroke="#FFD700" StrokeThickness="2" />
+                                    <!-- Handler (Gold) -->
+                                    <Path Data="M6,12 L3,15"
+                                        Stroke="#FFD700" StrokeThickness="2" StrokeLineJoin="Round"
+                                        StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                                </Canvas>
+                            </Viewbox>
+                        </Button>
+                    </Grid>
+
+                    <!-- Row 2: Secondary Text (Spanish/Translation) -->
+                    <TextBlock x:Name="TranslatedTextBlock"
+                        Text=""
+                        Foreground="#99FFFFFF"
+                        FontSize="16"
+                        FontFamily="Segoe UI"
+                        TextWrapping="Wrap"
+                        TextAlignment="Left"
+                        Margin="0,6,0,0"
+                        FontStyle="Italic" />
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Border>
+</Window>
