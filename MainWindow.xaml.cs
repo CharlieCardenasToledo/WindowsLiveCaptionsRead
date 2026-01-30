@@ -504,47 +504,56 @@ namespace WindowsLiveCaptionsReader
                 this.DragMove();
         }
         private Services.BrowserCaptureService _browserScanner = new Services.BrowserCaptureService();
+        private Services.ChromeSessionService _chromeService = new Services.ChromeSessionService();
 
         private async void BrowserScan_Click(object sender, RoutedEventArgs e)
         {
-            StatusText.Text = "⏳ Switch to Browser in 3s...";
-            await Task.Delay(1000);
-            StatusText.Text = "⏳ Switch to Browser in 2s...";
-            await Task.Delay(1000);
-            StatusText.Text = "⏳ Switch to Browser in 1s...";
-            await Task.Delay(1000);
-
-            StatusText.Text = "🌐 Scanning...";
-            string text = await _browserScanner.GetSelectedTextAsync();
-
-            if (string.IsNullOrWhiteSpace(text))
-            {
-                StatusText.Text = "⚠️ No text found/selected.";
-                return;
-            }
-
-            StatusText.Text = "✅ Text Captured!";
+            StatusText.Text = "🌐 Connecting...";
             
-            // Open Assistant with this text
-            // If text is very long, maybe truncate for context preview?
-            // Reuse the existing logic to open Assistant
-            
-            if (_assistantWindow == null || !_assistantWindow.IsLoaded)
+            // 1. Try High-Fidelity CDP Connection (Selenium)
+            string text = "";
+            bool isCdpConnected = _chromeService.ConnectToExistingSession();
+
+            if (isCdpConnected)
             {
-                _assistantWindow = new AssistantWindow(_translator, $"[BROWSER CONTEXT]:\n{text}", this);
-                _assistantWindow.Show();
+                StatusText.Text = "⚡ CDP Connected! Scanning DOM...";
+                text = _chromeService.CaptureActiveTabContent();
+                _chromeService.Disconnect(); // Free resources, don't close browser
             }
             else
             {
-                _assistantWindow.UpdateContext($"[BROWSER CONTEXT]:\n{text}", true);
-                _assistantWindow.Activate();
-                if (_assistantWindow.WindowState == WindowState.Minimized) _assistantWindow.WindowState = WindowState.Normal;
+                // 2. Fallback to UI Automation (The "Old" Way)
+                StatusText.Text = "⚠️ Standard Scan (Run .bat for HD)...";
+                await Task.Delay(2000); // Wait for switch only if using UI Automation (which relies on focus)
+                text = await _browserScanner.GetSelectedTextAsync();
             }
-            
-            // Auto trigger analysis
-            // We need to expose Analyze if we want to force it, but passing context usually triggers it in constructor.
-            // If window was already open, UpdateContext doesn't auto-trigger Analyze in previous code.
-            // Ideally we should tell the window to analyze.
+
+            if (string.IsNullOrWhiteSpace(text) || text.StartsWith("Error") || text.StartsWith("Debug"))
+            {
+                StatusText.Text = isCdpConnected ? "❌ CDP Empty Result" : "⚠️ Legacy Scan Failed.";
+                
+                // Show hint if legacy failed
+                if (!isCdpConnected) 
+                {
+                     // Optional: MessageBox.Show("For better results, close Chrome and run 'LANZAR_MODO_EXAMEN.bat' from the project folder.", "Tip", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
+            else
+            {
+                StatusText.Text = "✅ Captured!";
+                
+                if (_assistantWindow == null || !_assistantWindow.IsLoaded)
+                {
+                    _assistantWindow = new AssistantWindow(_translator, $"[SOURCE: {(isCdpConnected ? "CHROME_DOM" : "SCREEN_READER")}]\n{text}", this);
+                    _assistantWindow.Show();
+                }
+                else
+                {
+                    _assistantWindow.UpdateContext($"[SOURCE: {(isCdpConnected ? "CHROME_DOM" : "SCREEN_READER")}]\n{text}", true);
+                    _assistantWindow.Activate();
+                    if (_assistantWindow.WindowState == WindowState.Minimized) _assistantWindow.WindowState = WindowState.Normal;
+                }
+            }
         }
 
         private async void GenerateSummary_Click(object sender, RoutedEventArgs e)

@@ -225,18 +225,47 @@ OUTPUT FORMAT:
 
         public async Task<string> GenerateSuggestionsAsync(string conversationContext, CancellationToken token = default)
         {
-            var prompt = $"The user is in a speaking exam. Based on the conversation history below, suggest 3 natural, short responses the user can say to answer the teacher/interviewer. \n\nIMPORTANT: The user is learning English (Level A2/B1). The suggestions must use simple vocabulary and grammar suitable for this level.\n\nConversation History:\n{conversationContext}\n\nProvide the output in this format:\n1. [English Response] | [Spanish Meaning]\n2. [English Response] | [Spanish Meaning]\n3. [English Response] | [Spanish Meaning]";
+            var prompt = $@"The user is in a speaking exam or English conversation practice. Based on the conversation history below, suggest 3 natural, COMPLETE responses the user can say.
+
+IMPORTANT REQUIREMENTS:
+- User is learning English at B1 level (CEFR)
+- Each response should be 2-4 complete sentences
+- Use vocabulary and grammar appropriate for B1 level
+- Responses should sound natural and conversational
+- Include helpful educational information
+
+Conversation History:
+{conversationContext}
+
+Provide the output in this EXACT format for each suggestion:
+
+1. [Complete English response with 2-4 sentences]
+   📝 Explicación: [Brief explanation in Spanish about grammar or usage]
+   📚 Vocabulario: [2-3 key words/phrases with Spanish meanings]
+   🇪🇸 Traducción: [Full Spanish translation]
+
+2. [Second complete response...]
+   📝 Explicación: [...]
+   📚 Vocabulario: [...]
+   🇪🇸 Traducción: [...]
+
+3. [Third complete response...]
+   📝 Explicación: [...]
+   📚 Vocabulario: [...]
+   🇪🇸 Traducción: [...]
+
+Make sure each response is educational and helps the student learn, not just answer.";
 
             var requestData = new
             {
                 model = _modelName,
                 messages = new[]
                 {
-                    new { role = "system", content = "You are a helpful English tutor assistant for a student at A2/B1 proficiency level. Suggest 3 concise, natural, and simple responses. Output ONLY the 3 numbered suggestions." },
+                    new { role = "system", content = "You are an expert English tutor for B1 level students (CEFR). Your goal is to help students learn while providing natural, appropriate responses. Each suggestion should be educational, complete (2-4 sentences), and include grammar explanations, vocabulary help, and Spanish translations. Always follow the exact format requested." },
                     new { role = "user", content = prompt }
                 },
                 stream = false,
-                temperature = 0.5
+                temperature = 0.7
             };
             
             var jsonContent = JsonSerializer.Serialize(requestData);
