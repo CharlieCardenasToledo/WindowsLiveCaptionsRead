@@ -84,7 +84,29 @@
 
 ---
 
-## 🚀 Instalación
+## 📥 Descargar e Instalar (Para Usuarios Finales)
+
+### Instalación Rápida (Recomendado para Usuarios No Técnicos)
+
+**Opción 1: Instalador Automático (PowerShell)**
+1. Descarga el proyecto ZIP desde GitHub
+2. Extrae en una carpeta
+3. Clic derecho en `INSTALAR.ps1` → "Ejecutar con PowerShell"
+4. Sigue las instrucciones en pantalla
+
+**Opción 2: Instalador Portable (Próximamente)**
+- Descarga `EnglishLearningAssistant-v1.0-Portable.zip` desde [Releases](https://github.com/CharlieCardenasToledo/WindowsLiveCaptionsRead/releases)
+- Extrae y ejecuta `INSTALAR.bat`
+
+**Opción 3: Instalador Autoextraíble (Próximamente)**
+- Descarga `EnglishLearningAssistant-v1.0-Setup.exe` desde [Releases](https://github.com/CharlieCardenasToledo/WindowsLiveCaptionsRead/releases)
+- Ejecuta el instalador
+
+📖 **Guía de Instalación Detallada**: Ver [INSTALACION.md](INSTALACION.md)
+
+---
+
+## 🚀 Instalación (Para Desarrolladores)
 
 ### 1. Clonar el Repositorio
 ```bash
