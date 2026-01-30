@@ -7,6 +7,8 @@
 
 > **AI-powered English learning assistant** that captures live conversations, provides real-time translations, and generates intelligent response suggestions for B1 level students.
 
+**English | [Español](README.es.md)**
+
 ---
 
 ## 📋 Table of Contents
