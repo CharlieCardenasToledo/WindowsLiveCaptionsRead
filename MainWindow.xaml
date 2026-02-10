@@ -74,73 +74,83 @@
                 <RowDefinition Height="Auto" /> <!-- Active Translation -->
             </Grid.RowDefinitions>
 
-            <!-- 1. Minimal Header -->
+            <!-- 1. Redesigned Header with Mode Indicator -->
             <Grid Grid.Row="0" Margin="15,10,15,5">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" /> <!-- Status/Indicator -->
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" /> <!-- Controls -->
+                    <ColumnDefinition Width="*" /> <!-- Mode Indicator -->
+                    <ColumnDefinition Width="Auto" /> <!-- Utilities -->
                 </Grid.ColumnDefinitions>
 
-                <!-- Status Indicator -->
+                <!-- Prominent Mode Indicator -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Ellipse x:Name="StatusIndicator" Width="8" Height="8" Fill="#00FF7F"
-                        Margin="0,0,8,0">
-                        <!-- Static for now, animation requires ViewModel binding setup -->
-                    </Ellipse>
-                    <TextBlock x:Name="StatusText" Text="Ready" Foreground="#66FFFFFF" FontSize="11"
+                    <Border x:Name="ModeIndicatorBadge" Background="#4CAF50" CornerRadius="4"
+                        Padding="8,4" Margin="0,0,10,0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock x:Name="ModeIcon" Text="⚡" FontSize="14" Foreground="White"
+                                Margin="0,0,5,0" />
+                            <TextBlock x:Name="ModeText" Text="MODO LIVE" FontSize="12"
+                                FontWeight="Bold" Foreground="White" />
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock x:Name="StatusText" Text="Escuchando..." Foreground="#AAAAAA"
+                        FontSize="11"
                         VerticalAlignment="Center" FontWeight="SemiBold" />
+
+                    <!-- Recording Timer (hidden by default) -->
+                    <TextBlock x:Name="RecordingTimer" Text="00:00" Foreground="#FF5722"
+                        FontSize="12"
+                        FontWeight="Bold" Margin="10,0,0,0" VerticalAlignment="Center"
+                        Visibility="Collapsed" />
+
+                    <!-- Session Controls (Inside StackPanel for layout) -->
+                    <Button x:Name="BtnSessions" Click="Sessions_Click"
+                        Style="{StaticResource CleanIconButtonStyle}" Margin="15,0,0,0"
+                        ToolTip="Sesiones Guardadas">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE81C;" FontFamily="Segoe MDL2 Assets" FontSize="14"
+                                Margin="0,0,5,0" />
+                            <TextBlock x:Name="CurrentSessionTitle" Text="Nueva Sesión"
+                                FontSize="11"
+                                Foreground="#CCC" />
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
 
-                <!-- Window Controls -->
-                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                    <!-- Pause/Resume Button -->
-                    <Button x:Name="BtnPause" Click="PauseResume_Click"
-                        Style="{StaticResource CleanIconButtonStyle}" Margin="0,0,5,0"
-                        ToolTip="Pause Listening">
-                        <TextBlock x:Name="BtnPauseIcon" Text="&#xE769;"
-                            FontFamily="Segoe MDL2 Assets" FontSize="14" />
+                <!-- Utility Controls (Right side) -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+
+                    <!-- Vocabulary Button -->
+                    <Button Click="Vocabulary_Click" Style="{StaticResource CleanIconButtonStyle}"
+                        Margin="0,0,5,0"
+                        ToolTip="My Vocabulary">
+                        <TextBlock Text="📚" FontSize="16" />
                     </Button>
 
-                    <!-- Microphone Button -->
-                    <Button x:Name="BtnMic" Click="MicToggle_Click"
+                    <!-- AI Assistant Button -->
+                    <Button x:Name="BtnQuickAssistHeader" Click="Copilot_Click"
                         Style="{StaticResource CleanIconButtonStyle}" Margin="0,0,5,0"
-                        ToolTip="Enable Microphone">
-                        <TextBlock x:Name="BtnMicIcon" Text="&#xE720;"
-                            FontFamily="Segoe MDL2 Assets" FontSize="14" />
-                    </Button>
-
-                    <!-- Clear History Button -->
-                    <Button Click="ClearHistory_Click"
-                        Style="{StaticResource CleanIconButtonStyle}" Margin="0,0,5,0"
-                        ToolTip="Clear History">
-                        <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="14" />
-                    </Button>
-
-                    <!-- Scan Button -->
-                    <Button x:Name="BtnBrowserScan" Click="BrowserScan_Click"
-                        Style="{StaticResource CleanIconButtonStyle}" Margin="0,0,5,0"
-                        ToolTip="Scan selected text in Browser">
-                        <TextBlock Text="🌐" FontSize="14" />
+                        ToolTip="Asistente de IA (Ctrl+Space)">
+                        <TextBlock Text="💡" FontSize="16" />
                     </Button>
 
                     <!-- Settings Button -->
                     <Button x:Name="BtnSettings" Click="Settings_Click"
                         Style="{StaticResource CleanIconButtonStyle}" Margin="0,0,5,0"
-                        ToolTip="Settings">
+                        ToolTip="Configuración">
                         <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="14" />
                     </Button>
 
-                    <!-- Summary Button -->
-                    <Button Click="GenerateSummary_Click"
+                    <!-- Clear History Button -->
+                    <Button Click="ClearHistory_Click"
                         Style="{StaticResource CleanIconButtonStyle}" Margin="0,0,5,0"
-                        ToolTip="End Session &amp; Generate Notes">
-                        <TextBlock Text="&#xE70F;" FontFamily="Segoe MDL2 Assets" FontSize="14" />
+                        ToolTip="Limpiar Historial">
+                        <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="14" />
                     </Button>
 
                     <!-- Close Button -->
                     <Button Click="CloseApp_Click" Style="{StaticResource CleanIconButtonStyle}"
-                        ToolTip="Close Application">
+                        ToolTip="Cerrar Aplicación">
                         <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets" FontSize="12" />
                     </Button>
                 </StackPanel>
@@ -153,23 +163,23 @@
                 BorderThickness="1"
                 Visibility="Collapsed" Padding="15" Panel.ZIndex="100" Width="220">
                 <StackPanel>
-                    <TextBlock Text="Settings" Foreground="White" FontWeight="Bold"
+                    <TextBlock Text="Configuración" Foreground="White" FontWeight="Bold"
                         Margin="0,0,0,10" />
 
                     <!-- Audio Settings Section -->
-                    <TextBlock Text="Microphone Input" Foreground="Gray" FontSize="11"
+                    <TextBlock Text="Entrada de Micrófono" Foreground="Gray" FontSize="11"
                         Margin="0,5,0,2" />
                     <ComboBox x:Name="ComboMicrophones"
                         SelectionChanged="ComboMicrophones_SelectionChanged"
                         Height="25" Margin="0,0,0,10" />
 
-                    <Button Content="Test &amp; Validate System" Click="TestSystem_Click"
+                    <Button Content="Probar Sistema" Click="TestSystem_Click"
                         Background="#333" Foreground="White" BorderBrush="Gray" Height="25"
                         Margin="0,0,0,5" />
 
                     <!-- Validation Output -->
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                        <TextBlock Text="Mic Level:" Foreground="Gray" FontSize="11"
+                        <TextBlock Text="Nivel Mic:" Foreground="Gray" FontSize="11"
                             VerticalAlignment="Center" Margin="0,0,5,0" />
                         <ProgressBar x:Name="MicLevelBar" Width="100" Height="4" Maximum="1"
                             Value="0" Background="#222" Foreground="#00FF00" BorderThickness="0" />
@@ -180,15 +190,26 @@
                     <Separator Background="#33FFFFFF" Margin="0,0,0,10" />
 
                     <DockPanel LastChildFill="False" Margin="0,0,0,5">
-                        <TextBlock Text="Opacity" Foreground="#CCCCCC" VerticalAlignment="Center" />
+                        <TextBlock Text="Opacidad" Foreground="#CCCCCC" VerticalAlignment="Center" />
                     </DockPanel>
                     <Slider Minimum="0.2" Maximum="1.0" Value="0.8"
                         ValueChanged="Slider_ValueChanged" Margin="0,0,0,15" />
 
-                    <CheckBox Content="Always on Top" Foreground="#CCCCCC" IsChecked="True"
+                    <CheckBox Content="Siempre Visible" Foreground="#CCCCCC" IsChecked="True"
                         Checked="Topmost_Checked" Unchecked="Topmost_Unchecked" Margin="0,0,0,5" />
 
-                    <Button Content="Close Menu" Click="CloseSettings_Click" Margin="0,10,0,0"
+                    <!-- NEW: Browser Scan moved here -->
+                    <Separator Background="#33FFFFFF" Margin="0,10,0,10" />
+                    <Button x:Name="BtnBrowserScanSettings" Click="BrowserScan_Click"
+                        Background="#333" Foreground="White" BorderBrush="Gray" Height="30"
+                        Margin="0,0,0,5">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="🌐" FontSize="14" Margin="0,0,5,0" />
+                            <TextBlock Text="Escanear Navegador" FontSize="11" />
+                        </StackPanel>
+                    </Button>
+
+                    <Button Content="Cerrar Menú" Click="CloseSettings_Click" Margin="0,10,0,0"
                         Background="#33FFFFFF" Foreground="White" BorderThickness="0" Padding="5">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
@@ -207,6 +228,7 @@
                     </Button>
                 </StackPanel>
             </Border>
+
 
             <!-- 2. History List (Background) -->
             <ScrollViewer Grid.Row="1" x:Name="HistoryScrollViewer"
@@ -284,6 +306,116 @@
                 </Grid>
             </Border>
 
+            <!-- Session Panel Overlay -->
+            <Border x:Name="SessionPanel" Grid.Row="1" Grid.RowSpan="2" Background="#FA1E1E1E"
+                CornerRadius="10" Margin="20" Visibility="Collapsed" Panel.ZIndex="200"
+                BorderBrush="#44FFFFFF" BorderThickness="1">
+                <Grid Margin="20">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <!-- Header -->
+                    <DockPanel Grid.Row="0" LastChildFill="False" Margin="0,0,0,15">
+                        <TextBlock Text="Saved Sessions" FontSize="20" FontWeight="Bold"
+                            Foreground="White" VerticalAlignment="Center" />
+                        <Button Content="&#xE711;" FontFamily="Segoe MDL2 Assets"
+                            Click="CloseSessions_Click"
+                            DockPanel.Dock="Right" Style="{StaticResource CleanIconButtonStyle}"
+                            FontSize="16" />
+                    </DockPanel>
+
+                    <!-- Search & New -->
+                    <Grid Grid.Row="1" Margin="0,0,0,15">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Background="#333" CornerRadius="4" Margin="0,0,10,0">
+                            <TextBox x:Name="SearchSessionsBox" Text="Search..."
+                                GotFocus="SearchSessionsBox_GotFocus"
+                                LostFocus="SearchSessionsBox_LostFocus"
+                                KeyUp="SearchSessionsBox_KeyUp"
+                                Background="Transparent" Foreground="#AAA" BorderThickness="0"
+                                Padding="10,8" VerticalContentAlignment="Center" />
+                        </Border>
+
+                        <Button Grid.Column="1" Click="NewSession_Click"
+                            Background="#4CAF50" Foreground="White" Padding="15,8"
+                            BorderThickness="0">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border Background="{TemplateBinding Background}"
+                                        CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="+" Margin="0,0,5,0" FontWeight="Bold" />
+                                            <TextBlock Text="New Session" />
+                                        </StackPanel>
+                                    </Border>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+                    </Grid>
+
+                    <!-- List -->
+                    <ListBox x:Name="SessionsList" Grid.Row="2" Background="Transparent"
+                        BorderThickness="0"
+                        MouseDoubleClick="SessionsList_MouseDoubleClick"
+                        ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                        Margin="0,0,0,15">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="#15FFFFFF" CornerRadius="6" Padding="12"
+                                    Margin="0,0,0,8" Cursor="Hand">
+                                    <DockPanel>
+                                        <TextBlock
+                                            Text="{Binding StartTime, StringFormat='MMM dd, HH:mm'}"
+                                            Foreground="#888" FontSize="12" DockPanel.Dock="Right"
+                                            VerticalAlignment="Top" />
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Title}" FontWeight="Bold"
+                                                Foreground="White" FontSize="14" Margin="0,0,0,4" />
+                                            <TextBlock Text="{Binding Summary}" Foreground="#AAA"
+                                                FontSize="12" TextTrimming="CharacterEllipsis"
+                                                MaxHeight="36" />
+                                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                                <TextBlock
+                                                    Text="{Binding Entries.Count, StringFormat='Entries: {0}'}"
+                                                    Foreground="#666" FontSize="11"
+                                                    Margin="0,0,10,0" />
+                                                <TextBlock
+                                                    Text="{Binding Questions.Count, StringFormat='Questions: {0}'}"
+                                                    Foreground="#666" FontSize="11" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </DockPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <!-- Footer (Export) -->
+                    <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="Export Markdown" Click="ExportSession_Click"
+                            Background="#33FFFFFF" Foreground="White" Padding="15,8"
+                            BorderThickness="0">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border Background="{TemplateBinding Background}"
+                                        CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                        <TextBlock Text="{TemplateBinding Content}" />
+                                    </Border>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
             <!-- 3. Active Translation (Dominant English) -->
             <Border Grid.Row="2" Padding="20,15,20,20" Background="#15FFFFFF"
                 CornerRadius="0,0,12,12">
@@ -352,6 +484,54 @@
                         TextAlignment="Left"
                         Margin="0,6,0,0"
                         FontStyle="Italic" />
+                </StackPanel>
+            </Border>
+            <!-- NEW: Primary Action Buttons (Bottom) -->
+            <Border Grid.Row="2" Padding="20,10,20,15" Background="Transparent" Panel.ZIndex="10">
+                <StackPanel>
+                    <!-- Primary Action Button (Large, Contextual) -->
+                    <Border x:Name="PrimaryButtonBorder" Background="#4CAF50" CornerRadius="8"
+                        Cursor="Hand" MouseLeftButtonDown="PrimaryAction_Click">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Opacity" Value="0.85" />
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"
+                            VerticalAlignment="Center" Margin="15">
+                            <TextBlock x:Name="PrimaryButtonIcon" Text="⏸️" FontSize="20"
+                                Foreground="White" Margin="0,0,10,0" VerticalAlignment="Center" />
+                            <TextBlock x:Name="PrimaryButtonText" Text="PAUSAR ESCUCHA"
+                                FontSize="16" FontWeight="Bold" Foreground="White"
+                                VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Secondary Action Button (Mode Switch) -->
+                    <Border x:Name="SecondaryButtonBorder" Background="#555555" CornerRadius="6"
+                        Cursor="Hand" Margin="0,10,0,0" MouseLeftButtonDown="SecondaryAction_Click">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Opacity" Value="0.85" />
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"
+                            VerticalAlignment="Center" Margin="12">
+                            <TextBlock x:Name="SecondaryButtonIcon" Text="🎙️" FontSize="16"
+                                Foreground="White" Margin="0,0,8,0" VerticalAlignment="Center" />
+                            <TextBlock x:Name="SecondaryButtonText" Text="Cambiar a Modo Grabación"
+                                FontSize="14" FontWeight="SemiBold" Foreground="White"
+                                VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
             </Border>
         </Grid>

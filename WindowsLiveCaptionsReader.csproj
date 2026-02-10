@@ -29,6 +29,15 @@
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="Selenium.WebDriver" Version="4.40.0" />
     <PackageReference Include="System.Speech" Version="10.0.2" />
+    <!-- Whisper for high-quality local transcription -->
+    <PackageReference Include="Whisper.net" Version="1.5.0" />
+    <PackageReference Include="Whisper.net.Runtime" Version="1.5.0" />
+    <!-- Database support -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.11" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.11">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
   </ItemGroup>
 
 </Project>

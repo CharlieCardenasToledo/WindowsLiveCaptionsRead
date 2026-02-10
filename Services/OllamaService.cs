@@ -152,6 +152,15 @@ namespace WindowsLiveCaptionsReader.Services
             }
         }
 
+        // Simple non-streaming wrapper for single-shot translation
+        public async Task<string> TranslateAsync(string text, string targetLang = "Spanish")
+        {
+            var result = "";
+            // We reuse the streaming method but just wait for it to finish and collect the buffer
+            await TranslateStreamAsync(text, (partial) => { result = partial; }, null, targetLang);
+            return result;
+        }
+
         public async Task<string> GenerateSummaryAsync(string fullHistory)
         {
             var prompt = $@"
@@ -223,6 +232,67 @@ OUTPUT FORMAT:
             try { File.AppendAllText("ollama_debug.log", message); } catch { }
         }
 
+        public async Task<string> GenerateResponseToQuestionAsync(string question, string conversationContext, CancellationToken token = default)
+        {
+            var prompt = $@"The user is taking an English class or practice session. The teacher asked a specific question.
+Helping the user to reply is your goal.
+Provide 3 distinct options for the user to reply, with varying complexity.
+
+QUESTION ASKED: ""{question}""
+
+CONTEXT:
+{conversationContext}
+
+REQUIREMENTS:
+1.  **Simple Option:** Short, direct answer (A2 Level).
+2.  **Standard Option:** Natural, complete answer (B1 Level).
+3.  **Detailed Option:** Elaborate answer with more details (B2 Level).
+
+FORMAT:
+Option 1 (Simple): [Text]
+(Translation): [Spanish Translation]
+
+Option 2 (Standard): [Text]
+(Translation): [Spanish Translation]
+
+Option 3 (Detailed): [Text]
+(Translation): [Spanish Translation]
+
+Only provide the options and translations. No intro/outro.";
+
+            var requestData = new
+            {
+                model = _modelName,
+                messages = new[]
+                {
+                    new { role = "system", content = "You are a helpful English tutor assistant. Your task is to provide reply options for the student." },
+                    new { role = "user", content = prompt }
+                },
+                stream = false,
+                temperature = 0.7
+            };
+            
+            var jsonContent = JsonSerializer.Serialize(requestData);
+            var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+
+            try
+            {
+                var response = await _httpClient.PostAsync(ChatUrl, content, token);
+                if (response.IsSuccessStatusCode)
+                {
+                    var responseString = await response.Content.ReadAsStringAsync(token);
+                    using var doc = JsonDocument.Parse(responseString);
+                    if (doc.RootElement.TryGetProperty("message", out var messageElement) &&
+                        messageElement.TryGetProperty("content", out var contentElement))
+                    {
+                        return CleanOutput(contentElement.GetString());
+                    }
+                }
+            }
+            catch { /* Ignore */ }
+            return "Error generating response options.";
+        }
+
         public async Task<string> GenerateSuggestionsAsync(string conversationContext, CancellationToken token = default)
         {
             var prompt = $@"The user is in a speaking exam or English conversation practice. Based on the conversation history below, suggest 3 natural, COMPLETE responses the user can say.
@@ -286,6 +356,53 @@ Make sure each response is educational and helps the student learn, not just ans
                 }
             }
             catch { /* Ignore errors */ }
+            return "";
+        }
+
+        public async Task<string> GenerateVocabularyExtractionAsync(string text, string targetLang = "Spanish", CancellationToken token = default)
+        {
+            var prompt = $@"Analyze the following English text and extract 3-5 key vocabulary words or phrases suitable for a B1/B2 English learner.
+Rules:
+1. Ignore proper nouns (names, places) unless relevant.
+2. Ignore very common words (A1 level).
+3. Focus on useful phrases or intermediate words.
+4. Output specific format: Word|Definition (English)|Translation ({targetLang})
+
+TEXT: ""{text}""
+
+OUTPUT FORMAT (one per line):
+Word|Definition|Translation";
+
+            var requestData = new
+            {
+                model = _modelName,
+                messages = new[]
+                {
+                    new { role = "system", content = "You are a vocabulary extraction specialist. Extract key B1/B2 words/phrases with definitions and translations." },
+                    new { role = "user", content = prompt }
+                },
+                stream = false,
+                temperature = 0.5
+            };
+            
+            var jsonContent = JsonSerializer.Serialize(requestData);
+            var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+
+            try
+            {
+                var response = await _httpClient.PostAsync(ChatUrl, content, token);
+                if (response.IsSuccessStatusCode)
+                {
+                    var responseString = await response.Content.ReadAsStringAsync(token);
+                    using var doc = JsonDocument.Parse(responseString);
+                    if (doc.RootElement.TryGetProperty("message", out var messageElement) &&
+                        messageElement.TryGetProperty("content", out var contentElement))
+                    {
+                        return CleanOutput(contentElement.GetString());
+                    }
+                }
+            }
+            catch { /* Ignore */ }
             return "";
         }
 

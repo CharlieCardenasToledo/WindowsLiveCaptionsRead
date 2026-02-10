@@ -1,12 +1,16 @@
 using System;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using Microsoft.Win32;
+using System.Windows.Media;
 using System.Windows.Threading;
 using WindowsLiveCaptionsReader.Services;
+using WindowsLiveCaptionsReader.Models;
 
 namespace WindowsLiveCaptionsReader
 {
@@ -16,14 +20,30 @@ namespace WindowsLiveCaptionsReader
         private OllamaService _translator;
         private AudioCaptureService _micService;
         
+        // New Services for Manual Mode
+        private AudioRecorderService _audioRecorder;
+        private WhisperService _whisper;
+        
+        // Session Management
+        private SessionService _sessionService;
+        private Session _currentSession;
+
+        private QuestionDetectionService _questionService;
+        private VocabularyService _vocabularyService;
+
+        
         // State flags
         private bool _isPaused = false;
         private bool _isMicActive = false;
+        private bool _isRecordingMode = false; // False = Real-time (Live), True = Manual Recording
         
         // Debouncing logic
         private DispatcherTimer _debounceTimer;
         private CancellationTokenSource? _translationCts;
         private string _pendingText = "";
+        
+        // Recording state
+        private string _tempAudioFile;
         
         public ObservableCollection<TranslationItem> History { get; set; }
 
@@ -37,6 +57,22 @@ namespace WindowsLiveCaptionsReader
             _reader = new CaptionReader();
             _translator = new OllamaService("llama3.2");
             _micService = new AudioCaptureService();
+            
+            try
+            {
+                // Initialize new services
+                _audioRecorder = new AudioRecorderService();
+                _whisper = new WhisperService();
+                _sessionService = new SessionService();
+                _questionService = new QuestionDetectionService(_translator);
+                _vocabularyService = new VocabularyService(_translator);
+                _tempAudioFile = Path.Combine(Path.GetTempPath(), "ela_recording.wav");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error initializing services: {ex.Message}\n\nStack: {ex.StackTrace}", "Startup Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                // Handle or rethrow if fatal
+            }
 
             _reader.TextChanged += Reader_TextChanged;
             _reader.StatusChanged += Reader_StatusChanged;
@@ -45,8 +81,8 @@ namespace WindowsLiveCaptionsReader
             _micService.StatusChanged += (s, status) => 
             {
                 Dispatcher.Invoke(() => {
-                     // Prefix mic status to distinguish
-                     if (_isMicActive) StatusText.Text = $"Mic: {status}";
+                     // Only show mic status in Live mode
+                     if (!_isRecordingMode && _isMicActive) StatusText.Text = $"Mic: {status}";
                 });
             };
             
@@ -68,8 +104,47 @@ namespace WindowsLiveCaptionsReader
 
         private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            _reader.Start();
-            await EnsureServicesAreRunning();
+            try 
+            {
+                _reader.Start();
+                
+                // Init database services
+                if (_sessionService != null) await _sessionService.InitializeAsync();
+                if (_vocabularyService != null) await _vocabularyService.InitializeAsync();
+                
+                await EnsureServicesAreRunning();
+            }
+            catch (Exception ex)
+            {
+                 MessageBox.Show($"Error during async initialization: {ex.Message}", "Initialization Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            await CreateNewSessionAsync();
+            
+            // Pre-load Whisper model in background to avoid delays later
+            _ = Task.Run(async () => 
+            {
+                try 
+                {
+                    await _whisper.InitializeAsync();
+                    Dispatcher.Invoke(() => StatusText.Text = "Whisper listo ✓");
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Whisper init error: {ex.Message}");
+                }
+            });
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            _reader.Stop();
+            _micService.StopListening();
+            _audioRecorder.Dispose();
+            _whisper.Dispose();
+            _sessionService.Dispose();
+            _vocabularyService.Dispose();
+            _translationCts?.Cancel();
+            base.OnClosed(e);
         }
 
         private async Task EnsureServicesAreRunning()
@@ -102,13 +177,11 @@ namespace WindowsLiveCaptionsReader
              if (!isRunning)
              {
                  StatusText.Text = "Ollama Error";
-                 StatusIndicator.Fill = System.Windows.Media.Brushes.Red;
                  TranslatedTextBlock.Text = "Could not start Ollama. Please run 'ollama serve' manually.";
              }
              else
              {
                  StatusText.Text = "Ready";
-                 StatusIndicator.Fill = System.Windows.Media.Brushes.SpringGreen;
                  TranslatedTextBlock.Text = ""; // Clear warning
              }
         }
@@ -140,10 +213,6 @@ namespace WindowsLiveCaptionsReader
             Dispatcher.Invoke(() => 
             {
                 StatusText.Text = e;
-                if (e.Contains("Error"))
-                    StatusIndicator.Fill = System.Windows.Media.Brushes.Red;
-                else if (e.Contains("Listening") && !_isPaused)
-                    StatusIndicator.Fill = System.Windows.Media.Brushes.SpringGreen;
             });
         }
 
@@ -192,7 +261,6 @@ namespace WindowsLiveCaptionsReader
 
             // Update UI status
             StatusText.Text = "Translating...";
-            StatusIndicator.Fill = System.Windows.Media.Brushes.Yellow;
 
             // Cancel previous translation if any
             _translationCts?.Cancel();
@@ -221,27 +289,69 @@ namespace WindowsLiveCaptionsReader
                         TranslatedTextBlock.Text = finalTranslation;
                         TranslatedTextBlock.Foreground = System.Windows.Media.Brushes.Red;
                         StatusText.Text = "Translation Error";
-                        StatusIndicator.Fill = System.Windows.Media.Brushes.Red;
                     }
                     else if (!string.IsNullOrWhiteSpace(finalTranslation))
                     {
                         TranslatedTextBlock.Text = finalTranslation;
                         StatusText.Text = "Done";
-                        StatusIndicator.Fill = System.Windows.Media.Brushes.SpringGreen;
                         
                         // Add to history
                         AddToHistory(textToTranslate, finalTranslation, currentIcon, currentColor);
                         
-                        // --- FASE 2: AUTO-TRIGGER ASSISTANT ---
-                        // Only auto-trigger if it came from "Teacher" (System) and looks like a question
-                        if (currentIcon == "\uE7F4" && IsPossibleQuestion(textToTranslate))
+                        // Save to DB
+                        var entry = new TranscriptionEntry
                         {
-                            if (_assistantWindow != null && _assistantWindow.IsLoaded)
+                            SessionId = _currentSession?.Id ?? 0,
+                            OriginalText = textToTranslate,
+                            TranslatedText = finalTranslation,
+                            Timestamp = DateTime.Now,
+                            Source = currentIcon == "\uE7F4" ? EntrySource.LiveCaption : EntrySource.Microphone, 
+                            ConfidenceScore = 1.0f 
+                        };
+                        
+                        if (_currentSession != null)
+                        {
+                            _currentSession.Entries.Add(entry);
+                            // Fire and forget save
+                            _ = _sessionService.SaveEntryAsync(entry);
+                        }
+
+                        // --- FASE 2: QUESTION DETECTION & AUTO-TRIGGER ---
+                        // Only auto-trigger if it came from "Teacher" (System)
+                        if (currentIcon == "\uE7F4")
+                        {
+                            var detectedQuestion = await _questionService.AnalyzeTextAsync(textToTranslate, _currentSession?.Id ?? 0, entry.Id);
+                            
+                            if (detectedQuestion != null)
                             {
+                                entry.ContainsQuestion = true;
+                                if (_currentSession != null)
+                                {
+                                    _currentSession.Questions.Add(detectedQuestion);
+                                    _ = _sessionService.SaveQuestionAsync(detectedQuestion);
+                                }
+                                
+                                // Show visual cue (optional console log for now)
+                                System.Diagnostics.Debug.WriteLine($"Question Detected: {detectedQuestion.Type} - {detectedQuestion.QuestionText}");
+
+                                // Auto-trigger Assistant (Phase 3.3)
                                 Dispatcher.Invoke(() => 
                                 {
-                                    string newContext = GetRecentContext();
-                                    _assistantWindow.UpdateContext(newContext); // Auto-Refresh
+                                    string context = GetRecentContext();
+                                    
+                                    if (_assistantWindow == null || !_assistantWindow.IsLoaded)
+                                    {
+                                        _assistantWindow = new AssistantWindow(_translator, context, this);
+                                        _assistantWindow.Show();
+                                    }
+                                    else
+                                    {
+                                        _assistantWindow.Activate();
+                                    }
+
+                                    // Trigger specific question mode
+                                    _assistantWindow.UpdateContext(context, false);
+                                    _assistantWindow.ShowQuestionResponse(detectedQuestion.QuestionText, context);
                                 });
                             }
                         }
@@ -264,22 +374,7 @@ namespace WindowsLiveCaptionsReader
             }
         }
 
-        private bool IsPossibleQuestion(string text)
-        {
-            if (string.IsNullOrWhiteSpace(text)) return false;
-            text = text.Trim();
-            
-            // Hard check: Question mark
-            if (text.EndsWith("?")) return true;
-            
-            // Soft check: Starts with question words (English)
-            var questions = new[] { "what", "where", "when", "why", "who", "how", "do", "does", "did", "are", "is", "can", "could", "would", "will" };
-            var firstWord = text.Split(' ')[0].ToLower();
-            
-            if (questions.Contains(firstWord) && text.Length > 10) return true; // Minimal length check
-            
-            return false;
-        }
+
 
         private void AddToHistory(string original, string translated, string icon = "\uE7F4", string color = "White")
         {
@@ -428,21 +523,260 @@ namespace WindowsLiveCaptionsReader
             SuggestionsOverlay.Visibility = Visibility.Collapsed;
         }
 
-        private void PauseResume_Click(object sender, RoutedEventArgs e)
+        // --- SIMPLIFIED UX: PRIMARY AND SECONDARY ACTION BUTTONS ---
+        
+        private void PrimaryAction_Click(object sender, MouseButtonEventArgs e)
         {
-            _isPaused = !_isPaused;
-            UpdatePauseButtonState();
-            
-           if (_isPaused)
+            if (_isRecordingMode)
             {
-                StatusText.Text = "Paused";
-                StatusIndicator.Fill = System.Windows.Media.Brushes.Orange;
+                // RECORDING MODE: Primary button handles Record/Stop
+                if (!_audioRecorder.IsRecording)
+                {
+                    // Start Recording
+                    StartRecording();
+                }
+                else
+                {
+                    // Stop and Analyze
+                    StopAndAnalyze();
+                }
             }
             else
             {
-                StatusText.Text = "Listening...";
-                StatusIndicator.Fill = System.Windows.Media.Brushes.SpringGreen;
+                // LIVE MODE: Primary button handles Pause/Resume
+                _isPaused = !_isPaused;
+                if (_isPaused)
+                {
+                    _reader.Stop();
+                    UpdatePrimaryButton("▶️", "REANUDAR ESCUCHA", "#FF9800");
+                    StatusText.Text = "Pausado";
+                }
+                else
+                {
+                    _reader.Start();
+                    UpdatePrimaryButton("⏸️", "PAUSAR ESCUCHA", "#4CAF50");
+                    StatusText.Text = "Escuchando...";
+                }
             }
+        }
+        
+        private void SecondaryAction_Click(object sender, MouseButtonEventArgs e)
+        {
+            // Toggle between Live and Recording modes
+            _isRecordingMode = !_isRecordingMode;
+            
+            if (_isRecordingMode)
+            {
+                // Switch to RECORDING Mode
+                SwitchToRecordingMode();
+            }
+            else
+            {
+                // Switch to LIVE Mode
+                SwitchToLiveMode();
+            }
+        }
+        
+        // Helper methods for UI updates
+        private void UpdatePrimaryButton(string icon, string text, string color)
+        {
+            PrimaryButtonIcon.Text = icon;
+            PrimaryButtonText.Text = text;
+            PrimaryButtonBorder.Background = (SolidColorBrush)new BrushConverter().ConvertFrom(color);
+        }
+        
+        private void UpdateSecondaryButton(string icon, string text)
+        {
+            SecondaryButtonIcon.Text = icon;
+            SecondaryButtonText.Text = text;
+        }
+        
+        private void SwitchToRecordingMode()
+        {
+            // Stop live capturing
+            _reader.Stop();
+            if (_isMicActive) _micService.StopListening();
+            
+            // Update mode indicator
+            ModeText.Text = "MODO GRABACIÓN";
+            ModeIcon.Text = "🎙️";
+            ModeIndicatorBadge.Background = (SolidColorBrush)new BrushConverter().ConvertFrom("#FF5722");
+            
+            // Update primary button
+            UpdatePrimaryButton("🔴", "GRABAR AUDIO", "#FF5722");
+            
+            // Update secondary button
+            UpdateSecondaryButton("⚡", "Volver a Modo Live");
+            
+            // Update status
+            StatusText.Text = "Listo para grabar";
+            OriginalTextBlock.Text = "Presiona 'GRABAR AUDIO' y habla sin límites";
+            TranslatedTextBlock.Text = "";
+            
+            _isPaused = false;
+        }
+        
+        private void SwitchToLiveMode()
+        {
+            // Resume live capturing
+            _reader.Start();
+            
+            // Update mode indicator
+            ModeText.Text = "MODO LIVE";
+            ModeIcon.Text = "⚡";
+            ModeIndicatorBadge.Background = (SolidColorBrush)new BrushConverter().ConvertFrom("#4CAF50");
+            
+            // Update primary button
+            UpdatePrimaryButton("⏸️", "PAUSAR ESCUCHA", "#4CAF50");
+            
+            // Update secondary button
+            UpdateSecondaryButton("🎙️", "Cambiar a Modo Grabación");
+            
+            // Update status
+            StatusText.Text = "Escuchando...";
+            RecordingTimer.Visibility = Visibility.Collapsed;
+            
+            _isPaused = false;
+        }
+        
+        private async void StartRecording()
+        {
+            try 
+            {
+                _audioRecorder.StartRecording(_tempAudioFile);
+                
+                // Update UI
+                UpdatePrimaryButton("⏹️", "DETENER Y ANALIZAR", "#E64A19");
+                RecordingTimer.Visibility = Visibility.Visible;
+                StatusText.Text = "Grabando...";
+                StatusText.Foreground = Brushes.Red;
+                
+                OriginalTextBlock.Text = "🔴 Grabando... Habla ahora";
+                TranslatedTextBlock.Text = "";
+                
+                // Start timer (simple implementation)
+                var startTime = DateTime.Now;
+                var timer = new DispatcherTimer();
+                timer.Interval = TimeSpan.FromSeconds(1);
+                timer.Tick += (s, e) =>
+                {
+                    if (_audioRecorder.IsRecording)
+                    {
+                        var elapsed = DateTime.Now - startTime;
+                        RecordingTimer.Text = elapsed.ToString(@"mm\:ss");
+                    }
+                    else
+                    {
+                        timer.Stop();
+                    }
+                };
+                timer.Start();
+            }
+            catch (Exception ex)
+            {
+                StatusText.Text = "Error al iniciar micrófono";
+                MessageBox.Show($"Error: {ex.Message}");
+            }
+        }
+        
+        private async void StopAndAnalyze()
+        {
+            if (_audioRecorder.IsRecording)
+            {
+                // 1. Stop Recording
+                _audioRecorder.StopRecording();
+                RecordingTimer.Visibility = Visibility.Collapsed;
+                StatusText.Text = "Procesando audio...";
+                StatusText.Foreground = Brushes.Cyan;
+                
+                UpdatePrimaryButton("🔴", "GRABAR AUDIO", "#FF5722");
+                
+                try
+                {
+                    // 2. Transcribe with Whisper (Local)
+                    OriginalTextBlock.Text = "📝 Transcribiendo con Whisper...";
+                    TranslatedTextBlock.Text = "";
+                    
+                    if (!_whisper.IsModelLoaded)
+                    {
+                         StatusText.Text = "Descargando modelo Whisper...";
+                         await _whisper.InitializeAsync();
+                    }
+                    
+                    string transcription = await _whisper.TranscribeAsync(_tempAudioFile);
+                    
+                    if (string.IsNullOrWhiteSpace(transcription))
+                    {
+                        StatusText.Text = "No se detectó voz";
+                        OriginalTextBlock.Text = "No se detectó voz en la grabación";
+                        return;
+                    }
+
+                    // 3. Translate & Show
+                    OriginalTextBlock.Text = transcription;
+                    StatusText.Text = "Traduciendo...";
+                    
+                    // Translate with Ollama
+                    string translation = await _translator.TranslateAsync(transcription);
+                    TranslatedTextBlock.Text = translation;
+                    
+                    // Add to history
+                    AddToHistory(transcription, translation, "\uE720", "#FF4CAF50"); // Mic icon
+                    
+                    StatusText.Text = "Análisis listo";
+                    StatusText.Foreground = Brushes.SpringGreen;
+                    
+                    // 4. Open Assistant for Context
+                    Copilot_Click(null, null);
+                }
+                catch (Exception ex)
+                {
+                    StatusText.Text = "Error al procesar";
+                    MessageBox.Show($"Error: {ex.Message}");
+                    OriginalTextBlock.Text = "Error al procesar el audio";
+                }
+            }
+        }
+        
+        // Keep old methods for compatibility but mark as deprecated
+        private void ModeSwitch_Click(object sender, RoutedEventArgs e)
+        {
+            // Redirect to new secondary action logic
+            _isRecordingMode = !_isRecordingMode;
+            if (_isRecordingMode) SwitchToRecordingMode();
+            else SwitchToLiveMode();
+        }
+
+        private async void PauseResume_Click(object sender, RoutedEventArgs e)
+        {
+            // Redirect to unified primary action logic
+            if (_isRecordingMode)
+            {
+                if (!_audioRecorder.IsRecording) StartRecording();
+                else StopAndAnalyze();
+            }
+            else
+            {
+                _isPaused = !_isPaused;
+                if (_isPaused)
+                {
+                    _reader.Stop();
+                    UpdatePrimaryButton("▶️", "REANUDAR ESCUCHA", "#FF9800");
+                    StatusText.Text = "Pausado";
+                }
+                else
+                {
+                    _reader.Start();
+                    UpdatePrimaryButton("⏸️", "PAUSAR ESCUCHA", "#4CAF50");
+                    StatusText.Text = "Escuchando...";
+                }
+            }
+        }
+        
+        private async void StopAndSend_Click(object sender, RoutedEventArgs e)
+        {
+            // Redirect to unified stop and analyze
+            StopAndAnalyze();
         }
         
         private void MicToggle_Click(object sender, RoutedEventArgs e)
@@ -452,15 +786,12 @@ namespace WindowsLiveCaptionsReader
             if (_isMicActive)
             {
                 _micService.Start();
-                BtnMic.Foreground = System.Windows.Media.Brushes.SpringGreen;
-                BtnMic.ToolTip = "Disable Microphone";
+                StatusText.Text = "Micrófono activo";
             }
             else
             {
                 _micService.Stop();
-                BtnMic.Foreground = System.Windows.Media.Brushes.White;
-                BtnMic.ToolTip = "Enable Microphone";
-                StatusText.Text = "Listening (Captions)...";
+                StatusText.Text = "Micrófono desactivado";
             }
         }
 
@@ -471,16 +802,7 @@ namespace WindowsLiveCaptionsReader
             TranslatedTextBlock.Text = "";
         }
 
-        private void UpdatePauseButtonState()
-        {
-             // Icon updates are handled in XAML via binding or style triggers usually, 
-             // but for direct code behind update if we named the button content:
-             if (BtnPauseIcon != null)
-             {
-                BtnPauseIcon.Text = _isPaused ? "\uE768" : "\uE769"; // Play : Pause
-                BtnPause.ToolTip = _isPaused ? "Resume Listening" : "Pause Listening";
-             }
-        }
+        // UpdatePauseButtonState removed - functionality moved to PrimaryAction_Click
 
         public string GetRecentContext()
         {
@@ -565,7 +887,6 @@ namespace WindowsLiveCaptionsReader
             }
 
             StatusText.Text = "Generating Summary...";
-            StatusIndicator.Fill = System.Windows.Media.Brushes.Yellow;
 
             // Prepare transcript
             var sb = new System.Text.StringBuilder();
@@ -583,7 +904,6 @@ namespace WindowsLiveCaptionsReader
                 System.IO.File.WriteAllText(filename, summary);
                 
                 StatusText.Text = "Summary Saved!";
-                StatusIndicator.Fill = System.Windows.Media.Brushes.Cyan;
                 
                 // Open file automatically
                 try {
@@ -596,6 +916,165 @@ namespace WindowsLiveCaptionsReader
                  MessageBox.Show(ex.Message);
             }
         }
+        private async Task CreateNewSessionAsync()
+        {
+            string defaultTitle = $"Session {DateTime.Now:MMM dd, HH:mm}";
+            _currentSession = await _sessionService.CreateSessionAsync(defaultTitle);
+            
+            Dispatcher.Invoke(() => 
+            {
+                CurrentSessionTitle.Text = _currentSession.Title;
+                // Clear history if new session
+                History.Clear();
+                OriginalTextBlock.Text = "Listening...";
+                TranslatedTextBlock.Text = "";
+            });
+        }
+
+        private async void Sessions_Click(object sender, RoutedEventArgs e)
+        {
+            if (SessionPanel.Visibility == Visibility.Visible)
+            {
+                SessionPanel.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                // Close other panels
+                SettingsPanel.Visibility = Visibility.Collapsed;
+                SuggestionsOverlay.Visibility = Visibility.Collapsed;
+                
+                SessionPanel.Visibility = Visibility.Visible;
+                await RefreshSessionsList();
+            }
+        }
+        
+        private async Task RefreshSessionsList(string query = "")
+        {
+            var sessions = await _sessionService.SearchSessionsAsync(query);
+            SessionsList.ItemsSource = sessions;
+        }
+
+        private async void NewSession_Click(object sender, RoutedEventArgs e)
+        {
+            // Save current if needed (autosave handles it, but maybe force save?)
+            if (_currentSession != null)
+            {
+                await _sessionService.SaveSessionAsync(_currentSession);
+            }
+            
+            await CreateNewSessionAsync();
+            SessionPanel.Visibility = Visibility.Collapsed;
+        }
+
+        private void CloseSessions_Click(object sender, RoutedEventArgs e)
+        {
+            SessionPanel.Visibility = Visibility.Collapsed;
+        }
+
+        private async void SessionsList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            if (SessionsList.SelectedItem is Session selectedSession)
+            {
+                // Load session
+                var loaded = await _sessionService.LoadSessionAsync(selectedSession.Id);
+                if (loaded != null)
+                {
+                    _currentSession = loaded;
+                    _sessionService.StartAutoSave(_currentSession); // Switch auto-save to this session
+                    
+                    CurrentSessionTitle.Text = loaded.Title;
+                    
+                    // Populate History
+                    History.Clear();
+                    foreach(var entry in loaded.Entries.OrderBy(x => x.Timestamp))
+                    {
+                        AddToHistory(entry.OriginalText, entry.TranslatedText, 
+                            entry.Source == EntrySource.Microphone ? "\uE720" : "\uE7F4", 
+                            entry.Source == EntrySource.Microphone ? "#90EE90" : "#CCCCFF");
+                    }
+                    
+                    SessionPanel.Visibility = Visibility.Collapsed;
+                }
+            }
+        }
+
+        private void SearchSessionsBox_GotFocus(object sender, RoutedEventArgs e)
+        {
+            if (SearchSessionsBox.Text == "Buscar...")
+            {
+                SearchSessionsBox.Text = "";
+                SearchSessionsBox.Foreground = Brushes.White;
+            }
+        }
+
+        private void SearchSessionsBox_LostFocus(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrWhiteSpace(SearchSessionsBox.Text))
+            {
+                SearchSessionsBox.Text = "Buscar...";
+                SearchSessionsBox.Foreground = Brushes.Gray;
+            }
+        }
+
+        private async void SearchSessionsBox_KeyUp(object sender, KeyEventArgs e)
+        {
+             string query = SearchSessionsBox.Text == "Buscar..." ? "" : SearchSessionsBox.Text;
+             await RefreshSessionsList(query);
+        }
+
+        private async void ExportSession_Click(object sender, RoutedEventArgs e)
+        {
+            Session sessionToExport = SessionsList.SelectedItem as Session;
+            
+            if (sessionToExport == null)
+            {
+                // Fallback to current session if valid
+                if (_currentSession != null)
+                {
+                    if (MessageBox.Show("No session selected in list. Export current active session?", "Export", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+                    {
+                        sessionToExport = _currentSession;
+                    }
+                    else
+                    {
+                        return;
+                    }
+                }
+                else
+                {
+                    MessageBox.Show("Please select a session to export.", "Export", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+            }
+
+            var dialog = new SaveFileDialog
+            {
+                Title = "Export Session to Markdown",
+                Filter = "Markdown Files (*.md)|*.md|All Files (*.*)|*.*",
+                FileName = $"Session_{sessionToExport.StartTime:yyyyMMdd_HHmm}.md"
+            };
+
+            if (dialog.ShowDialog() == true)
+            {
+                try
+                {
+                    string content = await _sessionService.ExportToMarkdownAsync(sessionToExport.Id);
+                    await File.WriteAllTextAsync(dialog.FileName, content);
+                    MessageBox.Show("Export successful!", "Export", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Export failed: {ex.Message}", "Export", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+        }
+
+        private void Vocabulary_Click(object sender, RoutedEventArgs e)
+        {
+            var vocabWin = new VocabularyWindow(_vocabularyService);
+            vocabWin.Owner = this;
+            vocabWin.ShowDialog();
+        }
     }
 
     public class TranslationItem
@@ -605,5 +1084,6 @@ namespace WindowsLiveCaptionsReader
         public DateTime Timestamp { get; set; }
         public string SourceIcon { get; set; } = "\uE7F4"; // Default to CC (Captions)
         public string SourceColor { get; set; } = "White";
+         // End of TranslationItem
     }
 }

@@ -1,0 +1,180 @@
+<Window x:Class="WindowsLiveCaptionsReader.VocabularyWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:local="clr-namespace:WindowsLiveCaptionsReader"
+    mc:Ignorable="d"
+    Title="My Vocabulary" Height="500" Width="800"
+    WindowStartupLocation="CenterOwner"
+    Background="#1E1E1E" Foreground="White"
+    WindowStyle="None" ResizeMode="CanResizeWithGrip" AllowsTransparency="True">
+
+    <Window.Resources>
+        <Style x:Key="CleanIconButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="4"
+                            Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#33FFFFFF" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+
+    <Border BorderBrush="#33FFFFFF" BorderThickness="1" CornerRadius="8" Background="#1E1E1E">
+        <Grid Margin="20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <Grid Grid.Row="0" Margin="0,0,0,20" MouseLeftButtonDown="Header_MouseLeftButtonDown"
+                Background="Transparent">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="📚" FontSize="24" Margin="0,0,10,0" VerticalAlignment="Center" />
+                    <TextBlock Text="My Vocabulary" FontSize="22" FontWeight="Bold"
+                        Foreground="White" VerticalAlignment="Center" />
+                </StackPanel>
+                <Button Grid.Column="1" Content="&#xE711;" FontFamily="Segoe MDL2 Assets"
+                    Click="Close_Click" Style="{StaticResource CleanIconButtonStyle}"
+                    FontSize="16" Padding="8" />
+            </Grid>
+
+            <!-- Search & Actions -->
+            <Grid Grid.Row="1" Margin="0,0,0,15">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Background="#333" CornerRadius="4" Margin="0,0,10,0">
+                    <TextBox x:Name="SearchBox" Text="Search..."
+                        GotFocus="SearchBox_GotFocus" LostFocus="SearchBox_LostFocus"
+                        KeyUp="SearchBox_KeyUp"
+                        Background="Transparent" Foreground="#AAA" BorderThickness="0"
+                        Padding="10,8" VerticalContentAlignment="Center" />
+                </Border>
+
+                <Button Grid.Column="1" Click="ExtractFromText_Click" Margin="0,0,10,0"
+                    Background="#2196F3" Foreground="White" Padding="15,8" BorderThickness="0">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border Background="{TemplateBinding Background}" CornerRadius="4"
+                                Padding="{TemplateBinding Padding}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="✨" Margin="0,0,5,0" />
+                                    <TextBlock Text="Analyze Text" />
+                                </StackPanel>
+                            </Border>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+
+                <Button Grid.Column="2" Click="AddWord_Click"
+                    Background="#4CAF50" Foreground="White" Padding="15,8" BorderThickness="0">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border Background="{TemplateBinding Background}" CornerRadius="4"
+                                Padding="{TemplateBinding Padding}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="+" Margin="0,0,5,0" FontWeight="Bold" />
+                                    <TextBlock Text="Add Word" />
+                                </StackPanel>
+                            </Border>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+            </Grid>
+
+            <!-- Vocabulary List -->
+            <DataGrid x:Name="VocabGrid" Grid.Row="2" Background="Transparent"
+                BorderThickness="0" HeadersVisibility="Column"
+                GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#33FFFFFF"
+                AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True"
+                RowBackground="Transparent" AlternatingRowBackground="#11FFFFFF"
+                Foreground="White" RowHeight="35">
+                <DataGrid.Resources>
+                    <Style TargetType="DataGridColumnHeader">
+                        <Setter Property="Background" Value="Transparent" />
+                        <Setter Property="Foreground" Value="#AAA" />
+                        <Setter Property="Padding" Value="10,5" />
+                        <Setter Property="HorizontalContentAlignment" Value="Left" />
+                    </Style>
+                    <Style TargetType="DataGridCell">
+                        <Setter Property="Padding" Value="10,0" />
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="DataGridCell">
+                                    <Border Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="0">
+                                        <ContentPresenter VerticalAlignment="Center" />
+                                    </Border>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                        <Style.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter Property="Background" Value="#33FFFFFF" />
+                                <Setter Property="Foreground" Value="White" />
+                                <Setter Property="BorderThickness" Value="0" />
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </DataGrid.Resources>
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Word" Binding="{Binding Word}" Width="150"
+                        FontWeight="Bold" />
+                    <DataGridTextColumn Header="Translation" Binding="{Binding SpanishTranslation}"
+                        Width="150" Foreground="#DDD" />
+                    <DataGridTextColumn Header="Definition" Binding="{Binding Definition}" Width="*" />
+                    <DataGridTextColumn Header="Level" Binding="{Binding Level}" Width="80" />
+                    <DataGridTemplateColumn Width="Auto">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Button Content="&#xE74D;" FontFamily="Segoe MDL2 Assets"
+                                    Click="DeleteWord_Click" Tag="{Binding Id}"
+                                    Style="{StaticResource CleanIconButtonStyle}"
+                                    Foreground="#FF5252" ToolTip="Delete" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <!-- Footer -->
+            <StatusBar Grid.Row="3" Background="Transparent" Foreground="#888" Margin="0,10,0,0">
+                <StatusBarItem>
+                    <TextBlock x:Name="StatusText" Text="Ready" />
+                </StatusBarItem>
+                <StatusBarItem HorizontalAlignment="Right">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock x:Name="CountText" Text="Total: 0 words" />
+                    </StackPanel>
+                </StatusBarItem>
+            </StatusBar>
+        </Grid>
+    </Border>
+</Window>

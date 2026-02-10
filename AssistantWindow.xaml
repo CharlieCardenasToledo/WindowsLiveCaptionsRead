@@ -70,9 +70,53 @@
                 <StackPanel>
                     <TextBlock Text="Suggested Responses:" Foreground="#FFD700" FontSize="11"
                         Margin="0,5,0,5" FontWeight="SemiBold" />
-                    <TextBlock x:Name="SuggestionsContent"
-                        Text="Press 'Analyze' to generate responses based on conversation history."
-                        Foreground="#DDD" TextWrapping="Wrap" FontSize="13" LineHeight="20" />
+
+                    <!-- Loading/Status Text -->
+                    <TextBlock x:Name="LoadingText" Text="Waiting for analysis..." Foreground="#DDD"
+                        TextWrapping="Wrap" FontSize="13" Margin="0,0,0,10" Visibility="Collapsed" />
+
+                    <!-- Interactive Items -->
+                    <ItemsControl x:Name="SuggestionsList">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="#15FFFFFF" CornerRadius="6" Margin="0,0,0,10"
+                                    Padding="10">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+
+                                        <!-- Header + Copy Button -->
+                                        <Grid Grid.Row="0" Margin="0,0,0,5">
+                                            <TextBlock Text="{Binding Title}" FontWeight="Bold"
+                                                Foreground="#44FFD700" FontSize="11" />
+                                            <Button HorizontalAlignment="Right" Content="&#xE8C8;"
+                                                FontFamily="Segoe MDL2 Assets"
+                                                Click="CopySuggestion_Click" Tag="{Binding Text}"
+                                                Background="Transparent" Foreground="#AAA"
+                                                BorderThickness="0"
+                                                Cursor="Hand" ToolTip="Copiar respuesta" />
+                                        </Grid>
+
+                                        <!-- Main Text -->
+                                        <TextBlock Grid.Row="1" Text="{Binding Text}"
+                                            Foreground="White" FontSize="13" TextWrapping="Wrap"
+                                            Margin="0,0,0,8" />
+
+                                        <!-- Translation -->
+                                        <Border Grid.Row="2" Background="#11000000" CornerRadius="4"
+                                            Padding="5">
+                                            <TextBlock Text="{Binding Translation}"
+                                                Foreground="#999" FontStyle="Italic" FontSize="11"
+                                                TextWrapping="Wrap" />
+                                        </Border>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                 </StackPanel>
             </ScrollViewer>
 

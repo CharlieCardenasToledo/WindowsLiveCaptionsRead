@@ -20,3 +20,7 @@ PLAN_IMPLEMENTACION_NIELSEN.md
 PLAN_MEJORAS_ASISTENTE.md
 GUIA_EJECUCION.md
 Class_Summary_*.md
+*.db
+.claude/
+output/
+installer/

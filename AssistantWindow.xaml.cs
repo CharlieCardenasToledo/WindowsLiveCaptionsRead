@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Controls;
 
 namespace WindowsLiveCaptionsReader
 {
@@ -29,23 +32,30 @@ namespace WindowsLiveCaptionsReader
         private async void Analyze()
         {
             StatusText.Text = "Analyzing...";
-            SuggestionsContent.Text = "Thinking...";
-            SuggestionsContent.Foreground = System.Windows.Media.Brushes.LightGray;
+            LoadingText.Text = "Thinking...";
+            LoadingText.Visibility = Visibility.Visible;
+            SuggestionsList.Visibility = Visibility.Collapsed;
 
             try
             {
-                var input = _context;
-                // Specific prompt for exam assistance
-                var response = await _ollama.GenerateSuggestionsAsync(input);
+                var response = await _ollama.GenerateSuggestionsAsync(_context);
                 
-                SuggestionsContent.Text = response;
-                SuggestionsContent.Foreground = System.Windows.Media.Brushes.White;
+                // For generic suggestions, we might just show the whole text if parsing is complex,
+                // or try to parse if structure matches. For now, wrap in one item or improve parsing later.
+                var items = new List<SuggestionItem> 
+                { 
+                    new SuggestionItem { Title = "General Suggestions", Text = response, Translation = "See below" } 
+                };
+                
+                SuggestionsList.ItemsSource = items;
+                LoadingText.Visibility = Visibility.Collapsed;
+                SuggestionsList.Visibility = Visibility.Visible;
                 StatusText.Text = "Ready";
             }
             catch (Exception ex)
             {
-                SuggestionsContent.Text = "Error: " + ex.Message;
-                SuggestionsContent.Foreground = System.Windows.Media.Brushes.Red;
+                LoadingText.Text = "Error: " + ex.Message;
+                LoadingText.Foreground = System.Windows.Media.Brushes.Red;
                 StatusText.Text = "Failed";
             }
         }
@@ -82,5 +92,76 @@ namespace WindowsLiveCaptionsReader
              ContextText.Text = _context;
              if (autoAnalyze) Analyze();
         }
+
+        public async void ShowQuestionResponse(string question, string context)
+        {
+            StatusText.Text = "Generating Options...";
+            LoadingText.Text = $"Generating options for: \"{question}\"...";
+            LoadingText.Visibility = Visibility.Visible;
+            SuggestionsList.Visibility = Visibility.Collapsed;
+
+            try
+            {
+                var response = await _ollama.GenerateResponseToQuestionAsync(question, context);
+                var items = ParseQuestionResponse(response);
+                
+                SuggestionsList.ItemsSource = items;
+                LoadingText.Visibility = Visibility.Collapsed;
+                SuggestionsList.Visibility = Visibility.Visible;
+                StatusText.Text = "Options Ready";
+            }
+            catch (Exception ex)
+            {
+                LoadingText.Text = "Error: " + ex.Message;
+                LoadingText.Foreground = System.Windows.Media.Brushes.Red;
+                StatusText.Text = "Failed";
+            }
+        }
+
+        private void CopySuggestion_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is string text)
+            {
+                Clipboard.SetText(text);
+                StatusText.Text = "Copied to clipboard!";
+            }
+        }
+
+        private List<SuggestionItem> ParseQuestionResponse(string text)
+        {
+            var items = new List<SuggestionItem>();
+            // Regex to find "Option X (Type): [Text] \n (Translation): [Trans]"
+            // Pattern: Option \d+ \((.*?)\):\s*(.*?)\s*\(Translation\):\s*(.*?)(?=\nOption|\z)
+            var regex = new Regex(@"Option \d+ \((.*?)\):\s*(.*?)\s*\(Translation\):\s*(.*?)(?=$|\nOption)", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+            
+            var matches = regex.Matches(text);
+            foreach (Match match in matches)
+            {
+                if (match.Groups.Count == 4)
+                {
+                    items.Add(new SuggestionItem
+                    {
+                        Title = match.Groups[1].Value.Trim(), // e.g. "Simple"
+                        Text = match.Groups[2].Value.Trim(),
+                        Translation = match.Groups[3].Value.Trim()
+                    });
+                }
+            }
+
+            if (items.Count == 0 && !string.IsNullOrWhiteSpace(text))
+            {
+                // Fallback
+                items.Add(new SuggestionItem { Title = "Response", Text = text, Translation = "" });
+            }
+
+            return items;
+        }
+    }
+
+    public class SuggestionItem
+    {
+        public string Title { get; set; } = "";
+        public string Text { get; set; } = "";
+        public string Translation { get; set; } = "";
     }
 }

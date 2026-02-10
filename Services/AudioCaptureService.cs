@@ -26,6 +26,8 @@ namespace WindowsLiveCaptionsReader.Services
             public string Name { get; set; } = "";
         }
 
+        public void StopListening() => Stop(); // Alias to fix build error
+        
         public List<AudioDevice> GetMicrophones()
         {
             var list = new List<AudioDevice>();
